@@ -1,12 +1,13 @@
 from __future__ import unicode_literals
 
 import re
+import hashlib
 
 try:
     from collections import OrderedDict
 except ImportError:
     OrderedDict = None
-
+from django.conf import settings as django_settings 
 from django import forms
 from django.utils.translation import ugettext_lazy as _
 
@@ -14,8 +15,8 @@ from django.contrib import auth
 from django.contrib.auth.models import User
 
 from account.conf import settings
-from account.models import EmailAddress
-
+from account.models import EmailAddress, Account
+import MySQLdb as mdb
 
 alnum_re = re.compile(r"^\w+$")
 
@@ -90,7 +91,26 @@ class LoginForm(forms.Form):
             else:
                 raise forms.ValidationError(_("This account is inactive."))
         else:
-            raise forms.ValidationError(self.authentication_fail_message)
+            username = self.cleaned_data['username']
+            password = self.cleaned_data['password']
+            con = settings.JZ_CON
+            cur = con.cursor(mdb.cursors.DictCursor)
+            cur.execute("SELECT username,password,salt,email FROM pre_ucenter_members WHERE username=%s LIMIT 1", (username,))
+            if cur.rowcount == 1:
+                user_record = cur.fetchone()
+                password_salt = hashlib.md5(hashlib.md5(password).hexdigest()+user_record['salt']).hexdigest()
+                if password_salt == user_record['password']:
+                    user_instance = User()
+                    user_instance.username = username
+                    user_instance.email = user_record['email']
+                    user_instance.set_password(password)
+                    user_instance.save()
+                    #Account.create(request=None, user=user_instance, create_email=False)
+                    user = auth.authenticate(**self.user_credentials())
+                else:
+                    raise forms.ValidationError(self.authentication_fail_message)
+            else:
+                raise forms.ValidationError(self.authentication_fail_message)
         return self.cleaned_data
 
     def user_credentials(self):
