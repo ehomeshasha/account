@@ -106,7 +106,7 @@ class LoginForm(forms.Form):
                     user_instance.set_password(password)
                     user_instance.save()
                     #Account.create(request=None, user=user_instance, create_email=False)
-                    user = auth.authenticate(**self.user_credentials())
+                    self.clean()
                 else:
                     raise forms.ValidationError(self.authentication_fail_message)
             else:
